@@ -15,21 +15,21 @@
  * of two primes, p,q , i.e N=p*q) and the number a, where a is a quadratic nonresidue modulo N, chosen at random, so that 
  * the Legendre symbols (a/p) and (a/q) are both equal to -1, therefore, the Jacobi symbol (a/p*q) = (a/N) is equal to 1
  */
-typedef struct pubkey_t
+typedef struct pubkey_s
 {
         mpz_t N; // the modulus, where N=p*q
         mpz_t a; // the quadratic nonresidue modulo N
-}pubkey_s;
+}pubkey_t;
 
 /* The Goldwasser - Micali private key, is the tuple of the two prime factors of the composite number N */
-typedef struct privkey_t
+typedef struct privkey_s
 {
         mpz_t p;
         mpz_t q;
-}privkey_s;
+}privkey_t;
 
 
-void gen_keys(pubkey_s* pbkey, privkey_s* prkey)
+void gen_keys(pubkey_t* pbkey, privkey_t* prkey)
 {
         mpz_t p, q, N;
         mpz_inits(p, q, N, NULL);
@@ -38,7 +38,7 @@ void gen_keys(pubkey_s* pbkey, privkey_s* prkey)
         gmp_randstate_t rndstate;
         gmp_randinit_default(rndstate);
 
-        arc4random_buf(&seed, sizeof(seed)); // generate high quality random number to use as PRNG seed
+        arc4random_buf(&seed, sizeof(seed)); // generate high quality random number to use as PRNG seed (Linux only function)
         
         gmp_randseed_ui(rndstate, seed);
         mpz_urandomb(p, rndstate, PRIME_LENGTH); // random integer of 512 bits
@@ -81,18 +81,86 @@ void gen_keys(pubkey_s* pbkey, privkey_s* prkey)
         //Store private key , (p,q)
         mpz_set(prkey->p, p);
         mpz_set(prkey->q, q);      
+
+        mpz_clears(p, q, N, a, pm1, p_exp, p_res, qm1, q_exp, q_res, NULL);
+        gmp_randclear(rndstate);
 }
 
+/* Encrypt a single bit */
+mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
+{
+        if(!cyphertext)
+        {
+                cyphertext = malloc(sizeof(mpz_t));
+                mpz_init(*cyphertext);
+        }
+
+        gmp_randstate_t rndstate;
+        gmp_randinit_default(rndstate);
+
+        unsigned long int seed;
+        arc4random_buf(&seed, sizeof(seed));
+        gmp_randseed_ui(rndstate, seed);
+
+        mpz_t r;
+        
+        while(1) // while loop just in case the random number is equal to zero, which is unwanted, since we need 1 < r < N
+        {
+                mpz_urandomm(r, rndstate, pbkey->N); // Generate the random element                
+                if( mpz_cmp_ui(r, 0) > 0)
+                        break;
+        }
+        
+        //compute cyphertext
+        if(plaintext == 0)
+                mpz_powm_ui(*cyphertext, r, 2, pbkey->N);
+        else if(plaintext == 1)
+        {
+                mpz_t ar_squared;
+                mpz_init(ar_squared);
+                mpz_mul(r, r, r); // r <- r^2
+                mpz_mul(ar_squared, r, pbkey->a);
+                mpz_mod(*cyphertext, ar_squared, pbkey->N);
+                mpz_clear(ar_squared);
+        }    
+
+        gmp_randclear(rndstate);
+        mpz_clear(r);
+
+        return cyphertext;
+}
+
+/* Decrypt a single bit */
+void dec_bit(unsigned short *plaintext, mpz_t *cyphertext, privkey_t *prkey)
+{
+        int legendre_res =  mpz_legendre(*cyphertext, prkey->p);
+        if( legendre_res == 1)
+                *plaintext = 0;
+        else if(legendre_res == -1)
+                *plaintext = 1;
+}
 
 
 
 int main(int argc, char** argv)
 {
-        pubkey_s* pbkey = malloc(sizeof(pubkey_s));
-        privkey_s* prkey = malloc(sizeof(privkey_s));
+        pubkey_t* pbkey = malloc(sizeof(pubkey_t));
+        privkey_t* prkey = malloc(sizeof(privkey_t));
         
-        // Generate public key
-        gen_keys(pbkey, prkey);
+        // Generate public and private key (we assume that only one party is transmitting information)
+        gen_keys(pbkey, prkey);        
+
+        unsigned short message = 1;         
+
+        mpz_t *cc = enc_bit(NULL, message, pbkey);
+        gmp_printf("The cyphertext is : %Zd\n", *cc);
+
+        unsigned short pp;
+
+        dec_bit(&pp, cc, prkey);
+
+        printf("Decrypted plaintext is : %d\n", pp);
+
 
       
         
