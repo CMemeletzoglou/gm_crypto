@@ -1,32 +1,4 @@
-#include <fcntl.h>
-#include <stdio.h>
-#include <bsd/stdlib.h> //needed for arc4random_buf
-#include <unistd.h>
-#include <time.h>
-#include <gmp.h>
-
-
-
-
-
-#define PRIME_LENGTH 512
-
-/* The Goldwasser - Micali public key, is the tuple of the modulus N (where N is a composite number, which is the product
- * of two primes, p,q , i.e N=p*q) and the number a, where a is a quadratic nonresidue modulo N, chosen at random, so that 
- * the Legendre symbols (a/p) and (a/q) are both equal to -1, therefore, the Jacobi symbol (a/p*q) = (a/N) is equal to 1
- */
-typedef struct pubkey_s
-{
-        mpz_t N; // the modulus, where N=p*q
-        mpz_t a; // the quadratic nonresidue modulo N
-}pubkey_t;
-
-/* The Goldwasser - Micali private key, is the tuple of the two prime factors of the composite number N */
-typedef struct privkey_s
-{
-        mpz_t p;
-        mpz_t q;
-}privkey_t;
+#include "gm_crypto.h"
 
 
 void gen_keys(pubkey_t* pbkey, privkey_t* prkey)
@@ -102,8 +74,9 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
         arc4random_buf(&seed, sizeof(seed));
         gmp_randseed_ui(rndstate, seed);
 
-        mpz_t r;
-        
+        mpz_t r;        
+        mpz_init(r);
+                
         while(1) // while loop just in case the random number is equal to zero, which is unwanted, since we need 1 < r < N
         {
                 mpz_urandomm(r, rndstate, pbkey->N); // Generate the random element                
@@ -125,44 +98,57 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
         }    
 
         gmp_randclear(rndstate);
-        mpz_clear(r);
+        mpz_clear(r);        
+        return cyphertext;
+}
+
+/* Encrypt multiple bits at once (i.e. a bitstream)  */
+mpz_t **enc_bitstream(mpz_t **cyphertext, unsigned short *plaintext, unsigned short msg_size, pubkey_t *pbkey) // the message consists of **msg_size** bits
+{
+        if(!cyphertext)
+        {
+                cyphertext = malloc(msg_size * sizeof(mpz_t*));
+                for(int i=0; i<msg_size; i++)
+                {
+                        *(cyphertext + i) = malloc(sizeof(mpz_t));
+                        mpz_init(**(cyphertext+i));
+                }
+        }
+        
+        for(int i=0; i<msg_size; i++)
+                mpz_set(**(cyphertext + i),  *(enc_bit(*(cyphertext+i), *(plaintext+i), pbkey)) );
 
         return cyphertext;
 }
 
 /* Decrypt a single bit */
-void dec_bit(unsigned short *plaintext, mpz_t *cyphertext, privkey_t *prkey)
+unsigned short *dec_bit(unsigned short *plaintext, mpz_t *cyphertext, privkey_t *prkey)
 {
+        if(!plaintext)
+                plaintext = malloc(sizeof(unsigned short));
+                
         int legendre_res =  mpz_legendre(*cyphertext, prkey->p);
         if( legendre_res == 1)
                 *plaintext = 0;
         else if(legendre_res == -1)
                 *plaintext = 1;
+        
+        return plaintext;
 }
 
-
-
-int main(int argc, char** argv)
+/* Decrypt multiple bits at once */
+unsigned short **dec_bitstream(unsigned short **plaintext, mpz_t **cyphertext, unsigned short msg_size, privkey_t *prkey)
 {
-        pubkey_t* pbkey = malloc(sizeof(pubkey_t));
-        privkey_t* prkey = malloc(sizeof(privkey_t));
+        if(!plaintext)
+        {
+                plaintext = malloc(msg_size * sizeof(unsigned short*));
+                for(int i=0; i<msg_size; i++)
+                        *(plaintext+i) = malloc(sizeof(unsigned short));                
+        }
         
-        // Generate public and private key (we assume that only one party is transmitting information)
-        gen_keys(pbkey, prkey);        
+        for(int i=0; i<msg_size; i++)
+                dec_bit(*(plaintext+i), *(cyphertext+i), prkey); 
 
-        unsigned short message = 1;         
-
-        mpz_t *cc = enc_bit(NULL, message, pbkey);
-        gmp_printf("The cyphertext is : %Zd\n", *cc);
-
-        unsigned short pp;
-
-        dec_bit(&pp, cc, prkey);
-
-        printf("Decrypted plaintext is : %d\n", pp);
-
-
-      
-        
-        return 0;
+        return plaintext;
 }
+
