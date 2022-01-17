@@ -9,6 +9,8 @@
  * of two primes, p,q , i.e N=p*q) and the number a, where a is a quadratic nonresidue modulo N, chosen at random, so that 
  * the Legendre symbols (a/p) and (a/q) are both equal to -1, therefore, the Jacobi symbol (a/p*q) = (a/N) is equal to 1
  */
+
+/* The Goldwasser - Micali public key, is the tuple (a,N) */    
 typedef struct pubkey_s
 {
         mpz_t N; // the modulus, where N=p*q

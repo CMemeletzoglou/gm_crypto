@@ -5,12 +5,12 @@ void gen_keys(pubkey_t* pbkey, privkey_t* prkey)
 {
         mpz_t p, q, N;
         mpz_inits(p, q, N, NULL);
-        unsigned long int seed;
+        size_t seed; //seed for the random number generator
 
         gmp_randstate_t rndstate;
         gmp_randinit_default(rndstate);
 
-        arc4random_buf(&seed, sizeof(seed)); // generate high quality random number to use as PRNG seed (Linux only function)
+        arc4random_buf(&seed, sizeof(seed)); // generate high quality random number to use as PRNG seed (Linux only function - need bsd/stdlib.h)
         
         gmp_randseed_ui(rndstate, seed);
         mpz_urandomb(p, rndstate, PRIME_LENGTH); // random integer of 512 bits
@@ -54,11 +54,12 @@ void gen_keys(pubkey_t* pbkey, privkey_t* prkey)
         mpz_set(prkey->p, p);
         mpz_set(prkey->q, q);      
 
+        // clear the GMP variables used
         mpz_clears(p, q, N, a, pm1, p_exp, p_res, qm1, q_exp, q_res, NULL);
         gmp_randclear(rndstate);
 }
 
-/* Encrypt a single bit */
+/* Encrypt a single bit. Return the resulting cyphertext in the memory region pointed by the cyphertext pointer (1st argument) */
 mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
 {
         if(!cyphertext)
@@ -70,11 +71,11 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
         gmp_randstate_t rndstate;
         gmp_randinit_default(rndstate);
 
-        unsigned long int seed;
+        size_t seed;
         arc4random_buf(&seed, sizeof(seed));
         gmp_randseed_ui(rndstate, seed);
 
-        mpz_t r;        
+        mpz_t r;  // the randomly selected value for each encryption process. This is what makes cyphertexts different, given the same plaintext
         mpz_init(r);
                 
         while(1) // while loop just in case the random number is equal to zero, which is unwanted, since we need 1 < r < N
@@ -89,7 +90,7 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
                 mpz_powm_ui(*cyphertext, r, 2, pbkey->N);
         else if(plaintext == 1)
         {
-                mpz_t ar_squared;
+                mpz_t ar_squared; // will be used to store ar^2
                 mpz_init(ar_squared);
                 mpz_mul(r, r, r); // r <- r^2
                 mpz_mul(ar_squared, r, pbkey->a);
@@ -102,13 +103,15 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
         return cyphertext;
 }
 
-/* Encrypt multiple bits at once (i.e. a bitstream)  */
-mpz_t **enc_bitstream(mpz_t **cyphertext, unsigned short *plaintext, unsigned short msg_size, pubkey_t *pbkey) // the message consists of **msg_size** bits
+/* Encrypt multiple bits at once (i.e. a bitstream). Return the result in the memory region pointed by the first argument (cyphertext pointer) .
+ * The bitstream to be encrypted, consists of **msg_size** bits
+ */
+mpz_t **enc_bitstream(mpz_t **cyphertext, unsigned short *plaintext, unsigned short msg_size, pubkey_t *pbkey)
 {
         if(!cyphertext)
         {
                 cyphertext = malloc(msg_size * sizeof(mpz_t*));
-                for(int i=0; i<msg_size; i++)
+                for(int i=0; i<msg_size; i++) // each element is a pointer, so allocate space for them and initialize the mpz variables pointed by them
                 {
                         *(cyphertext + i) = malloc(sizeof(mpz_t));
                         mpz_init(**(cyphertext+i));
@@ -121,13 +124,13 @@ mpz_t **enc_bitstream(mpz_t **cyphertext, unsigned short *plaintext, unsigned sh
         return cyphertext;
 }
 
-/* Decrypt a single bit */
+/* Decrypt a single bit. Return the resulting plaintext, in the memory region pointed by the first argument*/
 unsigned short *dec_bit(unsigned short *plaintext, mpz_t *cyphertext, privkey_t *prkey)
 {
         if(!plaintext)
                 plaintext = malloc(sizeof(unsigned short));
                 
-        int legendre_res =  mpz_legendre(*cyphertext, prkey->p);
+        int legendre_res =  mpz_legendre(*cyphertext, prkey->p); //calculate the Legendre symbol (c/p)
         if( legendre_res == 1)
                 *plaintext = 0;
         else if(legendre_res == -1)
@@ -136,7 +139,7 @@ unsigned short *dec_bit(unsigned short *plaintext, mpz_t *cyphertext, privkey_t 
         return plaintext;
 }
 
-/* Decrypt multiple bits at once */
+/* Decrypt multiple bits at once. Return the resulting plaintext bitstream, in the memory region pointer by the first argument*/
 unsigned short **dec_bitstream(unsigned short **plaintext, mpz_t **cyphertext, unsigned short msg_size, privkey_t *prkey)
 {
         if(!plaintext)
