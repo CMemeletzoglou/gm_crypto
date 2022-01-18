@@ -37,7 +37,7 @@ int main(int argc, char** argv)
                 printf("Decrypted: ");
                 for(int i=0; i<input_len; i++)
                 {
-                        printf(" %d ", **(ptext+i)); 
+                        printf("%d", **(ptext+i)); 
                         free(*(cyphtext+i));
                         free(*(ptext+i));
                 }
