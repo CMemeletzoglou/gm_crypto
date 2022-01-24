@@ -73,7 +73,7 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
 
         size_t seed;
         arc4random_buf(&seed, sizeof(seed));
-        gmp_randseed_ui(rndstate, seed);
+        gmp_randseed_ui(rndstate, seed);       
 
         mpz_t r;  // the randomly selected value for each encryption process. This is what makes cyphertexts different, given the same plaintext
         mpz_init(r);
@@ -83,8 +83,8 @@ mpz_t *enc_bit(mpz_t *cyphertext, unsigned short plaintext, pubkey_t *pbkey)
                 mpz_urandomm(r, rndstate, pbkey->N); // Generate the random element                
                 if( mpz_cmp_ui(r, 0) > 0)
                         break;
-        }
-        
+        }  
+
         //compute cyphertext
         if(plaintext == 0)
                 mpz_powm_ui(*cyphertext, r, 2, pbkey->N);

@@ -17,13 +17,14 @@ int main(int argc, char** argv)
 
         if(input_len == 1)
         {
-               unsigned short msg =  strtoul(str, NULL, 2);
-               mpz_t *cyphtext = enc_bit(NULL, msg, pbkey);
-               unsigned short *ptext = dec_bit(NULL, cyphtext, prkey);
-               printf("The decrypted plaintext is : %d\n", *ptext);
+                unsigned short msg =  strtoul(str, NULL, 2);
+                mpz_t *cyphtext = enc_bit(NULL, msg, pbkey);
+                gmp_printf("\n\nThe cyphertext is : %Zd\n\n", cyphtext);
+                unsigned short *ptext = dec_bit(NULL, cyphtext, prkey);
+                printf("The decrypted plaintext is : %d\n", *ptext);
 
-               free(cyphtext);
-               free(ptext);
+                free(cyphtext);
+                free(ptext);
         }                
         else if(input_len > 1)
         {
@@ -34,7 +35,10 @@ int main(int argc, char** argv)
                 mpz_t **cyphtext = enc_bitstream(NULL, msg, input_len, pbkey);
                 unsigned short **ptext = dec_bitstream(NULL, cyphtext, input_len, prkey);
 
-                printf("Decrypted: ");
+                for(int i=0; i<input_len; i++)
+                        gmp_printf("\nThe cyphertext for bit %d, is %Zd\n", i+1, *(cyphtext+i));
+
+                printf("\n\nDecrypted: ");
                 for(int i=0; i<input_len; i++)
                 {
                         printf("%d", **(ptext+i)); 
